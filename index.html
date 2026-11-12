@@ -31,8 +31,10 @@ button:disabled{opacity:.4}
 .item .t{min-width:0;flex:1}
 .item .t b{display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .top{position:sticky;top:env(safe-area-inset-top,0px);background:var(--bg);padding:8px 0;z-index:5}
-.modes{display:grid;grid-template-columns:repeat(3,1fr);gap:6px;margin-top:8px}
-.modes button{padding:9px 4px;font-size:.84rem}
+.modes{display:grid;grid-template-columns:repeat(4,1fr);gap:6px;margin-top:8px}
+.opt:disabled{opacity:1}
+.why{margin-top:8px;padding:10px 12px;border-left:3px solid var(--acc);background:var(--acc2);border-radius:6px;font-size:.92rem}
+.modes button{padding:9px 2px;font-size:.8rem}
 .modes button.on{background:var(--acc2);border-color:var(--acc);color:var(--acc)}
 .bar{height:6px;background:var(--line);border-radius:3px;overflow:hidden;margin-top:8px}
 .bar i{display:block;height:100%;background:var(--acc);transition:width .2s}
@@ -60,7 +62,7 @@ input.nm{font:inherit;width:100%;padding:6px 8px;border:1px solid var(--line);bo
 <main id="app"></main>
 <script>
 var LS=[],CS=[],cc=null,cur=null,mode="study",app=document.getElementById("app"),tick=null,memOnly=false,note="";
-var MODES={study:"Study",exam:"Exam",review:"Review"};
+var MODES={learn:"Learn",study:"Study",exam:"Exam",review:"Review"};
 var $=function(s){return document.querySelector(s)};
 function esc(s){var d=document.createElement("div");d.textContent=s==null?"":s;return d.innerHTML}
 function shuf(a){a=a.slice();for(var i=a.length-1;i>0;i--){var j=Math.floor(Math.random()*(i+1));var t=a[i];a[i]=a[j];a[j]=t}return a}
@@ -113,19 +115,20 @@ function reshuffle(){var st=cur.st,any=Object.keys(st.a.study).length+Object.key
 if(any&&!confirm("Reshuffle and clear your answers for this quiz?"))return;var mins=st.ex.mins,md=st.mode;cur.st=fresh(cur.data);cur.st.ex.mins=mins;cur.st.mode=md;save(cur);setMode(md,true)}
 function tally(){var qm=qmap(),a=ans(),c=0,n=0;ids().forEach(function(i){if(a[i]!=null){n++;if(isRight(qm[i],a[i]))c++}});return[c,n]}
 
-function quiz(){var st=cur.st,list=ids(),total=list.length,t=tally();
+function quiz(){var st=cur.st;st.a.learn=st.a.learn||{};st.i.learn=st.i.learn||0;var list=ids(),total=list.length,t=tally();
 var h='<div class="top"><div class="row"><button data-home>‹ Quizzes</button><b class="g" style="text-align:center;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+esc(cur.name)+'</b><button data-shuf>Reshuffle</button></div><div class="modes">';
 for(var k in MODES)h+='<button class="'+(k===mode?"on":"")+'" data-mode="'+k+'">'+MODES[k]+'</button>';
-h+='</div><div class="bar"><i style="width:'+(total?t[1]/total*100:0)+'%"></i></div><div class="row sub" style="justify-content:space-between;margin-top:4px"><span>'+(mode==="exam"?'<span id="tm"></span>':t[0]+' / '+t[1]+' correct')+'</span><span>'+t[1]+' of '+total+' answered</span></div></div>';
+h+='</div><div class="bar"><i style="width:'+(total?(mode==="learn"?(Math.min(st.i.learn,total-1)+1):t[1])/total*100:0)+'%"></i></div><div class="row sub" style="justify-content:space-between;margin-top:4px"><span>'+(mode==="exam"?'<span id="tm"></span>':mode==="learn"?'Answers shown':t[0]+' / '+t[1]+' correct')+'</span><span>'+(mode==="learn"?(Math.min(st.i.learn,total-1)+1)+' of '+total:t[1]+' of '+total+' answered')+'</span></div></div>';
 if(mode==="exam"&&st.ex.done){app.innerHTML=h+result();return}
 if(mode==="exam"&&!st.ex.end){h+='<div class="card"><h2>Exam mode</h2><p class="sub" style="margin:6px 0 12px">No feedback until you submit. The timer starts when you press Start.</p><div class="row"><label>Minutes <input id="mins" type="number" min="1" max="600" value="'+st.ex.mins+'"></label><button class="p" data-start>Start exam</button></div></div>';app.innerHTML=h;return}
 if(!total){h+='<div class="card"><h2>Nothing to review yet</h2><p class="sub" style="margin-top:6px">Answer some questions in Study or Exam mode. Anything you get wrong will appear here.</p></div>';app.innerHTML=h;return}
-var i=Math.min(st.i[mode],total-1),qm=qmap(),q=qm[list[i]],a=ans(),sel=a[q.id],reveal=mode!=="exam"&&sel!=null;
+var i=Math.min(st.i[mode],total-1),qm=qmap(),q=qm[list[i]],a=ans(),sel=a[q.id],reveal=mode==="learn"||(mode!=="exam"&&sel!=null),why=q.reason||q.explanation||q.rationale;
 h+='<div class="card"><div class="q"><small>Question '+(i+1)+' of '+total+' · #'+q.id+'</small>'+esc(q.question)+'</div>'+(q.image?'<img class="fig" alt="Figure for question '+q.id+'" src="'+q.image+'">':'');
 optOrder(q).forEach(function(oi,p){var o=q.options[oi],c="opt";
 if(reveal){if(o.correct)c+=" ok";else if(oi===sel)c+=" no"}else if(oi===sel)c+=" sel";
 h+='<button class="'+c+'" data-pick="'+oi+'"'+(reveal?" disabled":"")+'><b>'+String.fromCharCode(65+p)+'</b><span>'+esc(o.text)+'</span></button>'});
-if(reveal)h+='<p class="fb"><b>'+(isRight(q,sel)?"Correct.":"Not quite. The answer is highlighted in green.")+'</b></p>';
+if(reveal&&mode!=="learn")h+='<p class="fb"><b>'+(isRight(q,sel)?"Correct.":"Not quite. The answer is highlighted in green.")+'</b></p>';
+if(reveal)h+=why?'<p class="why"><b>Why:</b> '+esc(why)+'</p>':mode==="learn"?'<p class="sub" style="margin-top:8px">No reason saved for this question yet.</p>':'';
 h+='</div><div class="nav"><button data-go="-1"'+(i?"":" disabled")+'>‹ Previous</button><button class="p" data-go="1"'+(i<total-1?"":" disabled")+'>Next ›</button></div>';
 if(mode==="exam")h+='<div class="nav"><button data-submit>Submit exam</button></div>';
 h+='<details class="card"><summary>Jump to a question</summary><div class="grid">';
@@ -151,7 +154,7 @@ if("shuf" in d)return reshuffle();
 if(d.mode)return setMode(d.mode);
 if("start" in d){var m=parseInt($("#mins").value,10)||st.ex.mins;st.ex.mins=m;st.ex.end=Date.now()+m*60000;save(cur);return quiz()}
 if("submit" in d)return submit();
-if(d.pick!=null){var q=qmap()[ids()[st.i[mode]]];if(mode!=="exam"&&ans()[q.id]!=null)return;ans()[q.id]=+d.pick;save(cur);return quiz()}
+if(d.pick!=null){if(mode==="learn")return;var q=qmap()[ids()[st.i[mode]]];if(mode!=="exam"&&ans()[q.id]!=null)return;ans()[q.id]=+d.pick;save(cur);return quiz()}
 if(d.go){st.i[mode]=Math.max(0,Math.min(ids().length-1,st.i[mode]+ +d.go));save(cur);quiz();return window.scrollTo(0,0)}
 if(d.jump!=null){st.i[mode]=+d.jump;save(cur);quiz();window.scrollTo(0,0)}});
 app.addEventListener("change",function(e){var mv=e.target.dataset.mv;if(mv&&e.target.value){var r0=LS.filter(function(x){return x.id===mv})[0];r0.course=e.target.value;save(r0);return courseView()}var cr=e.target.dataset.renc;if(cr){var c0=CS.filter(function(x){return x.id===cr})[0];c0.name=e.target.value.trim()||c0.name;save(c0);return}var id=e.target.dataset.ren;if(id){var r=LS.filter(function(x){return x.id===id})[0];r.name=e.target.value.trim()||r.name;save(r)}});
