@@ -33,6 +33,8 @@ button:disabled{opacity:.4}
 .top{position:sticky;top:env(safe-area-inset-top,0px);background:var(--bg);padding:8px 0;z-index:5}
 .modes{display:grid;grid-template-columns:repeat(4,1fr);gap:6px;margin-top:8px}
 .opt:disabled{opacity:1}
+textarea{font:inherit;width:100%;padding:8px;border:1px solid var(--line);border-radius:8px;background:var(--card);color:var(--ink)}
+a.btn{text-decoration:none;display:inline-block}
 .why{margin-top:8px;padding:10px 12px;border-left:3px solid var(--acc);background:var(--acc2);border-radius:6px;font-size:.92rem}
 .modes button{padding:9px 2px;font-size:.8rem}
 .modes button.on{background:var(--acc2);border-color:var(--acc);color:var(--acc)}
@@ -100,11 +102,39 @@ function moveSel(r){var o='<option value="">Move to course…</option>';CS.forEa
 function courseView(){clearInterval(tick);cur=null;var C=cc==="none"?{name:"Unsorted"}:CS.filter(function(x){return x.id===cc})[0];if(!C)return home();
 var h='<div class="row"><button data-courses>‹ Courses</button>'+(cc==="none"?'':'<button class="d" data-delc="'+cc+'" style="margin-left:auto">Delete course</button>')+'</div>'+(cc==="none"?'<h1 style="margin-top:10px">Unsorted</h1>':'<input class="nm" style="font:700 1.4rem Georgia,serif;margin:10px 0" value="'+esc(C.name)+'" aria-label="Course name" data-renc="'+cc+'">')+'<p class="sub">Add this course’s quizzes, then pick a week to work on.</p>';
 h+='<div class="card drop"><p><b>Add quiz files</b></p><p class="sub" style="margin:4px 0 10px">Choose one or more of your offline quiz .html files.</p><label class="btn p" tabindex="0">Choose files<input id="fi" type="file" accept=".html,.htm,text/html" multiple hidden></label>'+(note?'<p class="msg">'+esc(note)+'</p>':'')+'</div>';
+h+='<div class="card"><p><b>Create from notes</b></p><p class="sub" style="margin:4px 0 10px">Turn slides or notes into a quiz with DeepSeek or any chatbot.</p><button class="p" data-maker>Create from notes</button></div>';
 if(memOnly)h+='<p class="msg">Saving isn’t available in this browser, so quizzes will disappear when you close the page.</p>';
 if(!LS.some(function(r){return(r.course||"none")===cc}))h+='<p class="sub">No quizzes in this course yet. Add your first file above.</p>';
 LS.filter(function(r){return(r.course||"none")===cc}).sort(function(a,b){return a.added-b.added}).forEach(function(r){var st=r.st,n=r.data.length,d=Object.keys(st.a.study).length;
 h+='<div class="card"><div class="item"><div class="t"><input class="nm" value="'+esc(r.name)+'" aria-label="Quiz name" data-ren="'+r.id+'"><span class="sub">'+n+' questions · '+d+' answered in Study</span></div></div><div class="row" style="margin-top:10px"><button class="p g" data-open="'+r.id+'">Open</button><button class="d" data-del="'+r.id+'">Delete</button></div>'+moveSel(r)+'</div>'});
 app.innerHTML=h;$("#fi").onchange=function(e){addFiles(e.target.files)}}
+
+/* create from notes */
+var MK={n:30,name:"",text:"",res:null,msg:"",info:""},mk=false;
+function rd(){var a=$("#mt");if(a)MK.text=a.value;var n=$("#mn");if(n)MK.n=Math.max(5,Math.min(60,+n.value||30));var m=$("#mnm");if(m)MK.name=m.value}
+function mkPrompt(){return "Use ONLY the attached lecture material. Write "+MK.n+" multiple-choice questions that test understanding, not just word recall.\nRules: exactly 4 options per question and exactly 1 correct answer; do not put letters like A) inside the option text; \"answer\" is the letter A, B, C or D; \"reason\" is one short sentence (under 25 words) based on the material.\nReply with ONLY a JSON array inside one code block, with no other text, in this format:\n[{\"question\":\"...\",\"options\":[\"...\",\"...\",\"...\",\"...\"],\"answer\":\"B\",\"reason\":\"...\"}]"}
+function copyTxt(t){return(navigator.clipboard&&navigator.clipboard.writeText?navigator.clipboard.writeText(t):Promise.reject()).catch(function(){var x=document.createElement("textarea");x.value=t;document.body.appendChild(x);x.select();var ok=false;try{ok=document.execCommand("copy")}catch(e){}x.remove();if(!ok)throw 0})}
+function parseQ(raw){var t=raw.replace(/```[a-z]*/gi,"").trim(),a=t.indexOf("["),b=t.lastIndexOf("]");if(a<0||b<a)return{err:"I couldn’t find a question list. Paste the whole reply, including the [ and ] brackets."};
+t=t.slice(a,b+1);var arr;try{arr=JSON.parse(t)}catch(e){try{arr=JSON.parse(t.replace(/,\s*([\]}])/g,"$1"))}catch(e2){var m=/position (\d+)/.exec(e2.message),n=m?(t.slice(0,+m[1]).match(/"question"/gi)||[]).length:0;return{err:"The list has a formatting error"+(n?" near question "+n:"")+". Ask the chatbot: “Fix the JSON formatting and send the full list again.”"}}}
+if(!Array.isArray(arr))return{err:"That isn’t a list of questions."};
+var good=[],bad=[];arr.forEach(function(o,i){var n=i+1,q=String(o.question||o.q||"").trim(),op=o.options||o.choices;if(op&&!Array.isArray(op))op=Object.keys(op).map(function(k){return op[k]});
+if(!q||!Array.isArray(op)||op.length<2){bad.push("Q"+n+": missing question or options");return}
+op=op.map(function(x){return String(x).replace(/^\(?[A-F][\).:]\s+/,"").trim()});
+var s=String(o.answer!=null?o.answer:o.correct!=null?o.correct:o.correct_answer).trim(),ix=-1;
+if(/^[A-F]$/i.test(s)||/^\(?[A-F][\).:]/i.test(s))ix=/([A-F])/i.exec(s)[1].toUpperCase().charCodeAt(0)-65;else ix=op.findIndex(function(x){return x.toLowerCase()===s.toLowerCase()});
+if(ix<0||ix>=op.length){bad.push("Q"+n+": couldn’t match the answer “"+s.slice(0,20)+"”");return}
+good.push({id:good.length+1,question:q,options:op.map(function(x,k){return{letter:String.fromCharCode(65+k),text:x,correct:k===ix}}),reason:String(o.reason||o.explanation||o.rationale||"").trim()})});
+return{good:good,bad:bad}}
+function ck(skip){if(!skip)rd();var r=parseQ(MK.text);if(r.err){MK.res=null;MK.msg=r.err}else if(!r.good.length){MK.res=null;MK.msg="No usable questions found. "+r.bad.slice(0,3).join("; ")}else{MK.res=r;MK.msg=""}mkView()}
+function maker(){history.pushState({},"");mk=true;MK.res=null;MK.msg="";MK.info="";mkView()}
+function mkView(){var r=MK.res,h='<div class="row"><button data-courses>‹ Back</button></div><h1 style="margin:10px 0 4px">Create from notes</h1><p class="sub">Use DeepSeek or any chatbot to write the questions, then paste them here.</p>';
+h+='<div class="card"><p><b>1. Set up</b></p><div class="row" style="margin:8px 0"><label>Questions <input id="mn" type="number" min="5" max="60" value="'+MK.n+'"></label></div><input id="mnm" class="nm" placeholder="Quiz name, e.g. Week 4 Optics" value="'+esc(MK.name)+'"></div>';
+h+='<div class="card"><p><b>2. Ask the chatbot</b></p><p class="sub" style="margin:4px 0 10px">Copy the prompt, open DeepSeek, attach your slides, paste the prompt and send.</p><div class="row"><button class="p" data-cp>Copy prompt</button><a class="btn" href="https://chat.deepseek.com" target="_blank" rel="noopener">Open DeepSeek</a></div>'+(MK.info?'<p class="sub" style="margin-top:8px">'+esc(MK.info)+'</p>':'')+'</div>';
+h+='<div class="card"><p><b>3. Paste the reply</b></p><p class="sub" style="margin:4px 0 10px">Copy the chatbot’s whole reply, then come back here.</p><textarea id="mt" rows="6" placeholder="Paste the reply here">'+esc(MK.text)+'</textarea><div class="row" style="margin-top:8px"><button class="p" data-pc>Paste from clipboard</button><button data-ck>Check questions</button></div>'+(MK.msg?'<p class="msg">'+esc(MK.msg)+'</p>':'')+'</div>';
+if(r){var q=r.good[0];h+='<div class="card"><p><b>'+r.good.length+' questions ready</b></p>'+(r.bad.length?'<p class="msg">Skipped: '+esc(r.bad.slice(0,5).join("; "))+(r.bad.length>5?"…":"")+'</p>':'')+'<p class="q" style="margin-top:10px">'+esc(q.question)+'</p>'+q.options.map(function(o){return'<p class="fb">'+(o.correct?"✓ <b>":"")+esc(o.letter+") "+o.text)+(o.correct?"</b>":"")+'</p>'}).join("")+(q.reason?'<p class="why"><b>Why:</b> '+esc(q.reason)+'</p>':'')+'<div class="row" style="margin-top:12px"><button class="p g" data-sv>Save to course</button><button data-dl>Download file</button></div></div>'}
+app.innerHTML=h}
+function mkSave(){var r=MK.res;if(!r)return;rd();var rec={id:"q"+Date.now()+Math.random().toString(36).slice(2,6),course:cc==="none"?null:cc,name:MK.name.trim()||"Notes quiz "+new Date().toLocaleDateString(),data:r.good,added:Date.now(),st:fresh(r.good)};LS.push(rec);save(rec);MK={n:30,name:"",text:"",res:null,msg:"",info:""};history.back()}
+function mkDl(){var b=new Blob(['<!DOCTYPE html><html><head><meta charset="utf-8"><title>Quiz</title></head><body><script>const rawQuizData = '+JSON.stringify(MK.res.good)+';<\/script></body></html>'],{type:"text/html"}),a=document.createElement("a");a.href=URL.createObjectURL(b);a.download=(MK.name.trim()||"notes-quiz")+".html";document.body.appendChild(a);a.click();a.remove()}
 
 /* quiz screen */
 function open(id){cur=LS.filter(function(r){return r.id===id})[0];mode=cur.st.mode||"study";setMode(mode,true)}
@@ -147,6 +177,12 @@ if(d.course){history.pushState({},"");cc=d.course;return courseView()}
 if("courses" in d)return history.back();
 if("addc" in d){var nm=$("#cn").value.trim();if(!nm)return;var c={id:"c"+Date.now(),type:"course",name:nm,added:Date.now()};CS.push(c);save(c);return home()}
 if(d.delc){if(confirm("Delete this course and all its quizzes?")){LS.filter(function(x){return x.course===d.delc}).forEach(function(x){dbOp("del",x.id).catch(function(){})});LS=LS.filter(function(x){return x.course!==d.delc});CS=CS.filter(function(x){return x.id!==d.delc});dbOp("del",d.delc).catch(function(){});home()}return}
+if("maker" in d)return maker();
+if("cp" in d){rd();return copyTxt(mkPrompt()).then(function(){MK.info="Prompt copied. Now open DeepSeek and paste it.";mkView()}).catch(function(){MK.info="Couldn’t copy automatically. Try again.";mkView()})}
+if("pc" in d){rd();return(navigator.clipboard&&navigator.clipboard.readText?navigator.clipboard.readText():Promise.reject()).then(function(t){MK.text=t;ck(true)}).catch(function(){MK.msg="Couldn’t read the clipboard. Long-press the box above and tap Paste.";mkView()})}
+if("ck" in d)return ck();
+if("sv" in d)return mkSave();
+if("dl" in d){rd();return mkDl()}
 if(d.open){history.pushState({},"");return open(d.open)}
 if(d.del){var r=LS.filter(function(x){return x.id===d.del})[0];if(confirm("Delete “"+r.name+"” and its progress?")){LS=LS.filter(function(x){return x!==r});dbOp("del",r.id).catch(function(){});courseView()}return}
 if("home" in d)return history.back();
@@ -160,7 +196,7 @@ if(d.jump!=null){st.i[mode]=+d.jump;save(cur);quiz();window.scrollTo(0,0)}});
 app.addEventListener("change",function(e){var mv=e.target.dataset.mv;if(mv&&e.target.value){var r0=LS.filter(function(x){return x.id===mv})[0];r0.course=e.target.value;save(r0);return courseView()}var cr=e.target.dataset.renc;if(cr){var c0=CS.filter(function(x){return x.id===cr})[0];c0.name=e.target.value.trim()||c0.name;save(c0);return}var id=e.target.dataset.ren;if(id){var r=LS.filter(function(x){return x.id===id})[0];r.name=e.target.value.trim()||r.name;save(r)}});
 try{var th=localStorage.getItem("qv-theme");if(th)document.documentElement.dataset.theme=th}catch(e){}
 dbOp("all").then(function(r){r=r||[];LS=r.filter(function(x){return x.type!=="course"});CS=r.filter(function(x){return x.type==="course"})}).catch(function(){memOnly=true}).then(home);
-window.addEventListener("popstate",function(){clearInterval(tick);if(cur){save(cur);cc=cur.course||"none";courseView()}else{cc=null;home()}});
+window.addEventListener("popstate",function(){clearInterval(tick);if(mk){mk=false;courseView()}else if(cur){save(cur);cc=cur.course||"none";courseView()}else{cc=null;home()}});
 try{navigator.storage.persist()}catch(e){}
 if("serviceWorker" in navigator)navigator.serviceWorker.register("sw.js").catch(function(){});
 </script>
