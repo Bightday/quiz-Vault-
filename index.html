@@ -33,6 +33,10 @@ button:disabled{opacity:.4}
 .top{position:sticky;top:env(safe-area-inset-top,0px);background:var(--bg);padding:8px 0;z-index:5}
 .modes{display:grid;grid-template-columns:repeat(4,1fr);gap:6px;margin-top:8px}
 .opt:disabled{opacity:1}
+.item{flex-wrap:wrap}.tile{display:flex;justify-content:space-between;align-items:center;width:100%;text-align:left;padding:14px;margin:8px 0;font-weight:400}.tile b{font-size:1.05rem}
+.seg{display:flex;gap:6px}.seg button{flex:1}.seg button.on{background:var(--acc2);border-color:var(--acc);color:var(--acc)}
+details.more summary{list-style:none;cursor:pointer;padding:8px 12px;border:1px solid var(--line);border-radius:10px;font-weight:700}details.more[open]{flex-basis:100%}.menu{display:flex;flex-direction:column;gap:8px;margin-top:8px}
+.lnk{border:0;background:none;color:var(--acc);text-decoration:underline;padding:10px 0;font-weight:500}
 textarea{font:inherit;width:100%;padding:8px;border:1px solid var(--line);border-radius:8px;background:var(--card);color:var(--ink)}
 a.btn{text-decoration:none;display:inline-block}
 .why{margin-top:8px;padding:10px 12px;border-left:3px solid var(--acc);background:var(--acc2);border-radius:6px;font-size:.92rem}
@@ -91,33 +95,78 @@ function isRight(q,a){return q.options[a]&&q.options[a].correct}
 
 /* home / library */
 function view(){if(cc)courseView();else home()}
+var AI=loadAI(),pg="",SHOWN={},SM="",GN={n:30,type:"mcq",name:"",notes:"",comments:"",busy:false};
+function loadAI(){var d={p:"gemini",gk:"",dk:"",gm:"gemini-2.5-flash",dm:"deepseek-v4-flash"};try{var x=JSON.parse(localStorage.getItem("qv-ai")||"{}");for(var k in x)d[k]=x[k]}catch(e){}return d}
+function saveAI(){try{localStorage.setItem("qv-ai",JSON.stringify(AI))}catch(e){}}
 function home(){clearInterval(tick);cur=null;cc=null;
-var h='<h1>Quiz Vault</h1><p class="sub">Add your courses, then add quizzes inside each one.</p><div class="card"><div class="row"><input class="nm g" id="cn" placeholder="New course name" aria-label="Course name"><button class="p" data-addc>Add course</button></div></div>';
+var h='<div class="row"><h1 class="g">Quiz Vault</h1><button data-set aria-label="AI settings">⚙︎ AI</button></div><div class="row" style="margin:14px 0"><input class="nm g" id="cn" placeholder="Add a course…" aria-label="Course name"><button class="p" data-addc>Add</button></div>';
 var un=LS.filter(function(r){return!r.course}).length;
-CS.sort(function(a,b){return a.added-b.added}).forEach(function(c){var n=LS.filter(function(r){return r.course===c.id}).length;h+='<div class="card item"><div class="t"><b>'+esc(c.name)+'</b><span class="sub">'+n+' quiz'+(n===1?'':'zes')+'</span></div><button class="p" data-course="'+c.id+'">Open</button></div>'});
-if(un)h+='<div class="card item"><div class="t"><b>Unsorted</b><span class="sub">'+un+' quiz'+(un===1?'':'zes')+' not in a course yet</span></div><button data-course="none">Open</button></div>';
-if(!CS.length&&!un)h+='<p class="sub">No courses yet. Name your first course above.</p>';
+CS.sort(function(a,b){return a.added-b.added}).forEach(function(c){var n=LS.filter(function(r){return r.course===c.id}).length;h+='<button class="card tile" data-course="'+c.id+'"><b>'+esc(c.name)+'</b><span class="sub">'+n+' quiz'+(n===1?'':'zes')+' ›</span></button>'});
+if(un)h+='<button class="card tile" data-course="none"><b>Unsorted</b><span class="sub">'+un+' ›</span></button>';
+if(!CS.length&&!un)h+='<p class="sub">Add your first course to get started.</p>';
 app.innerHTML=h}
-function moveSel(r){var o='<option value="">Move to course…</option>';CS.forEach(function(c){if(c.id!==r.course)o+='<option value="'+c.id+'">'+esc(c.name)+'</option>'});return CS.length?'<select class="nm" style="margin-top:8px" data-mv="'+r.id+'" aria-label="Move to course">'+o+'</select>':''}
-function courseView(){clearInterval(tick);cur=null;var C=cc==="none"?{name:"Unsorted"}:CS.filter(function(x){return x.id===cc})[0];if(!C)return home();
-var h='<div class="row"><button data-courses>‹ Courses</button>'+(cc==="none"?'':'<button class="d" data-delc="'+cc+'" style="margin-left:auto">Delete course</button>')+'</div>'+(cc==="none"?'<h1 style="margin-top:10px">Unsorted</h1>':'<input class="nm" style="font:700 1.4rem Georgia,serif;margin:10px 0" value="'+esc(C.name)+'" aria-label="Course name" data-renc="'+cc+'">')+'<p class="sub">Add this course’s quizzes, then pick a week to work on.</p>';
-h+='<div class="card drop"><p><b>Add quiz files</b></p><p class="sub" style="margin:4px 0 10px">Choose one or more of your offline quiz .html files.</p><label class="btn p" tabindex="0">Choose files<input id="fi" type="file" accept=".html,.htm,text/html" multiple hidden></label>'+(note?'<p class="msg">'+esc(note)+'</p>':'')+'</div>';
-h+='<div class="card"><p><b>Create from notes</b></p><p class="sub" style="margin:4px 0 10px">Turn slides or notes into a quiz with DeepSeek or any chatbot.</p><button class="p" data-maker>Create from notes</button></div>';
+function moveSel(r){var o='<option value="">Move to course…</option>';CS.forEach(function(c){if(c.id!==r.course)o+='<option value="'+c.id+'">'+esc(c.name)+'</option>'});return CS.length?'<select class="nm" data-mv="'+r.id+'" aria-label="Move to course">'+o+'</select>':''}
+function courseView(){clearInterval(tick);cur=null;var C=cc==="none"?{name:"Unsorted"}:CS.filter(function(x){return x.id===cc})[0];if(!C)return home();var nt=note;note="";
+var h='<div class="row"><button data-courses>‹ Back</button>'+(cc==="none"?'':'<details class="more" style="margin-left:auto"><summary>⋯</summary><div class="menu"><input class="nm" value="'+esc(C.name)+'" aria-label="Rename course" data-renc="'+cc+'"><button class="d" data-delc="'+cc+'">Delete course</button></div></details>')+'</div><h1 style="margin:10px 0">'+esc(C.name)+'</h1>';
+h+='<div class="row" style="margin-bottom:12px"><button class="p g" data-gen>✨ Generate quiz</button><label class="btn g" style="text-align:center">Import file<input id="fi" type="file" accept=".html,.htm,text/html" multiple hidden></label></div>'+(nt?'<p class="sub" style="margin-bottom:8px"><b>'+esc(nt)+'</b></p>':'');
 if(memOnly)h+='<p class="msg">Saving isn’t available in this browser, so quizzes will disappear when you close the page.</p>';
-if(!LS.some(function(r){return(r.course||"none")===cc}))h+='<p class="sub">No quizzes in this course yet. Add your first file above.</p>';
-LS.filter(function(r){return(r.course||"none")===cc}).sort(function(a,b){return a.added-b.added}).forEach(function(r){var st=r.st,n=r.data.length,d=Object.keys(st.a.study).length;
-h+='<div class="card"><div class="item"><div class="t"><input class="nm" value="'+esc(r.name)+'" aria-label="Quiz name" data-ren="'+r.id+'"><span class="sub">'+n+' questions · '+d+' answered in Study</span></div></div><div class="row" style="margin-top:10px"><button class="p g" data-open="'+r.id+'">Open</button><button class="d" data-del="'+r.id+'">Delete</button></div>'+moveSel(r)+'</div>'});
+var qs=LS.filter(function(r){return(r.course||"none")===cc}).sort(function(a,b){return a.added-b.added});
+if(!qs.length)h+='<p class="sub">No quizzes yet. Generate one or import a file.</p>';
+qs.forEach(function(r){h+='<div class="card item"><div class="t"><b>'+esc(r.name)+'</b><span class="sub">'+r.data.length+' questions</span></div><button class="p" data-open="'+r.id+'">Open</button><details class="more"><summary>⋯</summary><div class="menu"><input class="nm" value="'+esc(r.name)+'" aria-label="Rename quiz" data-ren="'+r.id+'">'+moveSel(r)+'<button class="d" data-del="'+r.id+'">Delete quiz</button></div></details></div>'});
 app.innerHTML=h;$("#fi").onchange=function(e){addFiles(e.target.files)}}
 
+/* AI settings and generation */
+function settings(){history.pushState({},"");pg="set";setView()}
+function setRd(){var g=AI.p==="gemini",k=$("#ak"),m=$("#am");if(k)AI[g?"gk":"dk"]=k.value.trim();if(m&&m.value.trim())AI[g?"gm":"dm"]=m.value.trim()}
+function setView(){var g=AI.p==="gemini";
+var h='<div class="row"><button data-courses>‹ Back</button></div><h1 style="margin:10px 0 4px">AI settings</h1><p class="sub">Choose which AI writes your quizzes. Your key stays on this phone.</p><div class="seg" style="margin:12px 0">'+[["gemini","Gemini"],["deepseek","DeepSeek"]].map(function(p){return'<button data-prov="'+p[0]+'" class="'+(AI.p===p[0]?"on":"")+'">'+p[1]+'</button>'}).join("")+'</div>';
+h+='<div class="card"><p class="sub" style="margin-bottom:8px">'+(g?"Get a free key at aistudio.google.com. Gemini reads PDFs, images and text.":"Get a key at platform.deepseek.com. DeepSeek reads text only, so paste notes or use a .txt file.")+'</p><input id="ak" class="nm" type="password" autocomplete="off" placeholder="Paste your API key" value="'+esc(g?AI.gk:AI.dk)+'"><details style="margin-top:10px"><summary class="sub">Advanced: model name</summary><input id="am" class="nm" style="margin-top:8px" value="'+esc(g?AI.gm:AI.dm)+'"></details><button class="p" style="margin-top:12px" data-saveai>Save</button>'+(SM?'<p class="sub" style="margin-top:8px">'+esc(SM)+'</p>':'')+'</div>';
+app.innerHTML=h}
+function grd(){var e=$("#gn");if(e)GN.n=Math.max(5,Math.min(200,+e.value||30));e=$("#gnm");if(e)GN.name=e.value;e=$("#gc");if(e)GN.comments=e.value;e=$("#gt");if(e)GN.notes=e.value}
+function genView(){GN.busy=false;var g=AI.p==="gemini";
+var h='<div class="row"><button data-courses>‹ Back</button><button style="margin-left:auto" data-set>'+(g?"Gemini":"DeepSeek")+' · change</button></div><h1 style="margin:10px 0">Generate quiz</h1>';
+h+='<div class="card"><input id="gnm" class="nm" placeholder="Quiz name, e.g. Week 4 Optics" value="'+esc(GN.name)+'"><div class="row" style="margin-top:10px"><label>Questions <input id="gn" type="number" min="5" max="200" value="'+GN.n+'"></label></div><div class="seg" style="margin-top:10px">'+[["mcq","MCQ"],["theory","Theory"],["mix","Mix"]].map(function(t){return'<button data-gt="'+t[0]+'" class="'+(GN.type===t[0]?"on":"")+'">'+t[1]+'</button>'}).join("")+'</div></div>';
+h+='<div class="card"><textarea id="gc" rows="2" placeholder="Optional instructions, e.g. focus on clinical cases">'+esc(GN.comments)+'</textarea><p class="sub" style="margin:10px 0 6px">'+(g?"Attach slides (PDF, images or text), or paste notes:":"Paste your notes, or attach a .txt file:")+'</p><input id="gf" type="file" multiple accept="'+(g?".pdf,.txt,.md,image/*":".txt,.md,text/plain")+'"><textarea id="gt" rows="4" style="margin-top:8px" placeholder="Paste notes here">'+esc(GN.notes)+'</textarea></div>';
+h+='<button class="p" style="width:100%" data-run>Generate</button><p class="sub" id="gmsg" style="margin-top:10px"></p><button class="lnk" data-man>No key? Use a chatbot manually</button>';
+app.innerHTML=h}
+function GM(t){var e=$("#gmsg");if(e)e.textContent=t}
+function b64(f){return new Promise(function(res,rej){var r=new FileReader();r.onload=function(){res(String(r.result).split(",")[1])};r.onerror=rej;r.readAsDataURL(f)})}
+function rj(r){return r.json().catch(function(){return{}}).then(function(j){if(!r.ok){var e=new Error((j.error&&(j.error.message||j.error))||("HTTP "+r.status));e.status=r.status;throw e}return j})}
+function callG(p,media){return fetch("https://generativelanguage.googleapis.com/v1beta/models/"+encodeURIComponent(AI.gm)+":generateContent",{method:"POST",headers:{"Content-Type":"application/json","x-goog-api-key":AI.gk},body:JSON.stringify({contents:[{role:"user",parts:media.concat([{text:p}])}],generationConfig:{responseMimeType:"application/json",temperature:.7}})}).then(rj).then(function(j){var c=j.candidates&&j.candidates[0];if(!c||!c.content)throw new Error("The AI returned nothing. Try again.");return c.content.parts.map(function(x){return x.text||""}).join("")})}
+function callD(p){return fetch("https://api.deepseek.com/chat/completions",{method:"POST",headers:{"Content-Type":"application/json","Authorization":"Bearer "+AI.dk},body:JSON.stringify({model:AI.dm,messages:[{role:"system",content:"You write exam questions and reply with JSON only."},{role:"user",content:p}],response_format:{type:"json_object"},stream:false})}).then(rj).then(function(j){return j.choices[0].message.content})}
+function callRetry(fn,n){return fn().catch(function(e){if(e.status===429&&n>0){GM("Rate limit reached. Waiting 20 seconds…");return new Promise(function(r){setTimeout(r,20000)}).then(function(){return callRetry(fn,n-1)})}throw e})}
+function errMsg(e){var m=e.message||"";if(e.status===401||e.status===403||/API key/i.test(m))return"Your key was rejected. Check it in AI settings.";if(e.status===429)return"Rate limit reached. Wait a minute, or ask for fewer questions.";if(e instanceof TypeError)return"Couldn’t reach the AI. Check your internet"+(AI.p==="deepseek"?". DeepSeek may block requests from a web app, so try Gemini.":".");return m.slice(0,160)}
+function genPrompt(cnt,mat,acc){var t=GN.type,sp=t==="mcq"?"All questions are multiple choice.":t==="theory"?"All questions are theory (written-answer) questions.":"Make about 70% multiple choice and 30% theory questions, mixed together.";
+var ex=acc.length?" You already wrote these, so write NEW questions on other parts of the material and never repeat or reword them: "+acc.slice(-60).map(function(q){return q.question.slice(0,60)}).join(" | ")+".":"";
+return "Use ONLY the lecture material provided. Write exactly "+cnt+" questions that test understanding, not just recall. "+sp+(GN.comments?" Extra instructions from the student: "+GN.comments+".":"")+ex+" Reply with ONLY a JSON object {\"questions\":[...]}. Multiple choice item: {\"type\":\"mcq\",\"question\":\"...\",\"options\":[\"...\",\"...\",\"...\",\"...\"],\"answer\":\"B\",\"reason\":\"one short sentence\"} with exactly 4 options, exactly 1 correct, and no letters inside the option text. Theory item: {\"type\":\"theory\",\"question\":\"...\",\"answer\":\"concise model answer in 2 to 4 sentences\",\"reason\":\"\"}."+(mat?"\n\nLECTURE MATERIAL:\n"+mat:"")}
+function genRun(){grd();if(GN.busy)return;var g=AI.p==="gemini",key=g?AI.gk:AI.dk;if(!key){GM("Add your "+(g?"Gemini":"DeepSeek")+" key in AI settings first.");return}
+var files=[].slice.call(($("#gf")||{}).files||[]),texts=[],media=[],btn=$("[data-run]");GN.busy=true;if(btn)btn.disabled=true;GM("Reading your material…");
+Promise.all(files.map(function(f){if(/\.(txt|md)$/i.test(f.name)||/^text\//.test(f.type))return f.text().then(function(t){texts.push(t)});
+if(!g)throw new Error("DeepSeek can’t read PDFs or images. Paste the text instead, or switch to Gemini.");
+if(f.size>12e6)throw new Error(f.name+" is too large. Keep each file under about 12 MB.");
+return b64(f).then(function(d){media.push({inline_data:{mime_type:f.type||"application/pdf",data:d}})})})).then(function(){
+var mat=(GN.notes+"\n"+texts.join("\n")).trim().slice(0,120000);if(!mat&&!media.length)throw new Error("Add your slides or paste some notes first.");
+var acc=[],seen={},fails=0,tries=0,max=Math.ceil(GN.n/25)+3,err=null;
+function step(){if(acc.length>=GN.n||tries>=max||fails>=2)return Promise.resolve();tries++;var cnt=Math.min(25,GN.n-acc.length);GM("Writing questions… "+acc.length+" of "+GN.n);
+return callRetry(function(){return g?callG(genPrompt(cnt,mat,acc),media):callD(genPrompt(cnt,mat,acc))},1).then(function(txt){var r=parseQ(txt);if(r.err||!r.good.length){fails++;return step()}fails=0;r.good.forEach(function(q){var k=q.question.toLowerCase();if(!seen[k]&&acc.length<GN.n){seen[k]=1;acc.push(q)}});return step()})}
+return step().catch(function(e){err=e}).then(function(){
+if(!acc.length){GN.busy=false;if(btn)btn.disabled=false;GM(err?errMsg(err):"The AI didn’t return usable questions. Try again, or ask for fewer.");return}
+acc.forEach(function(q,i){q.id=i+1});var rec={id:"q"+Date.now()+Math.random().toString(36).slice(2,6),course:cc==="none"?null:cc,name:GN.name.trim()||"Generated quiz "+new Date().toLocaleDateString(),data:acc,added:Date.now(),st:fresh(acc)};LS.push(rec);save(rec);
+note="Saved “"+rec.name+"” with "+acc.length+" questions"+(acc.length<GN.n?" (you asked for "+GN.n+(err?"; stopped: "+errMsg(err):"")+")":"")+".";GN.name="";GN.notes="";history.back()})
+}).catch(function(e){GN.busy=false;if(btn)btn.disabled=false;GM(errMsg(e))})}
+function theoryBlock(q,sel){var open=mode==="learn"||sel!=null||SHOWN[q.id];if(!open)return'<button class="p" data-ts="'+q.id+'">Show model answer</button>';return'<div class="why"><b>Model answer:</b> '+esc(q.answer)+'</div>'+(mode==="learn"?"":'<div class="row" style="margin-top:10px"><button class="g'+(sel===1?" p":"")+'" data-pick="1">Got it</button><button class="g'+(sel===0?" d":"")+'" data-pick="0">Missed it</button></div>')}
+
 /* create from notes */
-var MK={n:30,name:"",text:"",res:null,msg:"",info:""},mk=false;
+var MK={n:30,name:"",text:"",res:null,msg:"",info:"",acc:[]},mk=false;
 function rd(){var a=$("#mt");if(a)MK.text=a.value;var n=$("#mn");if(n)MK.n=Math.max(5,Math.min(60,+n.value||30));var m=$("#mnm");if(m)MK.name=m.value}
-function mkPrompt(){return "Use ONLY the attached lecture material. Write "+MK.n+" multiple-choice questions that test understanding, not just word recall.\nRules: exactly 4 options per question and exactly 1 correct answer; do not put letters like A) inside the option text; \"answer\" is the letter A, B, C or D; \"reason\" is one short sentence (under 25 words) based on the material.\nReply with ONLY a JSON array inside one code block, with no other text, in this format:\n[{\"question\":\"...\",\"options\":[\"...\",\"...\",\"...\",\"...\"],\"answer\":\"B\",\"reason\":\"...\"}]"}
+function mkPrompt(){var ex=MK.acc.length?"\nYou already wrote the questions listed below. Write NEW questions on different parts of the material. Do not repeat or reword any of them:\n"+MK.acc.map(function(q){return"- "+q.question.slice(0,70)}).join("\n"):"";
+return "Use ONLY the attached lecture material. Write "+MK.n+" multiple-choice questions that test understanding, not just word recall.\nRules: exactly 4 options per question and exactly 1 correct answer; do not put letters like A) inside the option text; \"answer\" is the letter A, B, C or D; \"reason\" is one short sentence (under 25 words) based on the material."+ex+"\nReply with ONLY a JSON array inside one code block, with no other text, in this format:\n[{\"question\":\"...\",\"options\":[\"...\",\"...\",\"...\",\"...\"],\"answer\":\"B\",\"reason\":\"...\"}]"}
 function copyTxt(t){return(navigator.clipboard&&navigator.clipboard.writeText?navigator.clipboard.writeText(t):Promise.reject()).catch(function(){var x=document.createElement("textarea");x.value=t;document.body.appendChild(x);x.select();var ok=false;try{ok=document.execCommand("copy")}catch(e){}x.remove();if(!ok)throw 0})}
 function parseQ(raw){var t=raw.replace(/```[a-z]*/gi,"").trim(),a=t.indexOf("["),b=t.lastIndexOf("]");if(a<0||b<a)return{err:"I couldn’t find a question list. Paste the whole reply, including the [ and ] brackets."};
 t=t.slice(a,b+1);var arr;try{arr=JSON.parse(t)}catch(e){try{arr=JSON.parse(t.replace(/,\s*([\]}])/g,"$1"))}catch(e2){var m=/position (\d+)/.exec(e2.message),n=m?(t.slice(0,+m[1]).match(/"question"/gi)||[]).length:0;return{err:"The list has a formatting error"+(n?" near question "+n:"")+". Ask the chatbot: “Fix the JSON formatting and send the full list again.”"}}}
 if(!Array.isArray(arr))return{err:"That isn’t a list of questions."};
 var good=[],bad=[];arr.forEach(function(o,i){var n=i+1,q=String(o.question||o.q||"").trim(),op=o.options||o.choices;if(op&&!Array.isArray(op))op=Object.keys(op).map(function(k){return op[k]});
+if((o.type||"").toLowerCase()==="theory"){var ta=String(o.answer||o.model_answer||"").trim();if(!q||!ta){bad.push("Q"+n+": missing question or answer");return}good.push({id:good.length+1,type:"theory",question:q,answer:ta,reason:String(o.reason||"").trim(),options:[{letter:"✗",text:"Missed it",correct:false},{letter:"✓",text:"Got it",correct:true}]});return}
 if(!q||!Array.isArray(op)||op.length<2){bad.push("Q"+n+": missing question or options");return}
 op=op.map(function(x){return String(x).replace(/^\(?[A-F][\).:]\s+/,"").trim()});
 var s=String(o.answer!=null?o.answer:o.correct!=null?o.correct:o.correct_answer).trim(),ix=-1;
@@ -126,18 +175,21 @@ if(ix<0||ix>=op.length){bad.push("Q"+n+": couldn’t match the answer “"+s.sli
 good.push({id:good.length+1,question:q,options:op.map(function(x,k){return{letter:String.fromCharCode(65+k),text:x,correct:k===ix}}),reason:String(o.reason||o.explanation||o.rationale||"").trim()})});
 return{good:good,bad:bad}}
 function ck(skip){if(!skip)rd();var r=parseQ(MK.text);if(r.err){MK.res=null;MK.msg=r.err}else if(!r.good.length){MK.res=null;MK.msg="No usable questions found. "+r.bad.slice(0,3).join("; ")}else{MK.res=r;MK.msg=""}mkView()}
-function maker(){history.pushState({},"");mk=true;MK.res=null;MK.msg="";MK.info="";mkView()}
+function maker(){history.replaceState({},"");mk=true;MK.acc=[];MK.res=null;MK.msg="";MK.info="";mkView()}
 function mkView(){var r=MK.res,h='<div class="row"><button data-courses>‹ Back</button></div><h1 style="margin:10px 0 4px">Create from notes</h1><p class="sub">Use DeepSeek or any chatbot to write the questions, then paste them here.</p>';
-h+='<div class="card"><p><b>1. Set up</b></p><div class="row" style="margin:8px 0"><label>Questions <input id="mn" type="number" min="5" max="60" value="'+MK.n+'"></label></div><input id="mnm" class="nm" placeholder="Quiz name, e.g. Week 4 Optics" value="'+esc(MK.name)+'"></div>';
+h+='<div class="card"><p><b>1. Set up</b></p><p class="sub">For a big quiz, do several batches of 30 to 50. Chatbots slip on very long replies.</p><div class="row" style="margin:8px 0"><label>Questions per batch <input id="mn" type="number" min="5" max="60" value="'+MK.n+'"></label></div><input id="mnm" class="nm" placeholder="Quiz name, e.g. Week 4 Optics" value="'+esc(MK.name)+'"></div>';
 h+='<div class="card"><p><b>2. Ask the chatbot</b></p><p class="sub" style="margin:4px 0 10px">Copy the prompt, open DeepSeek, attach your slides, paste the prompt and send.</p><div class="row"><button class="p" data-cp>Copy prompt</button><a class="btn" href="https://chat.deepseek.com" target="_blank" rel="noopener">Open DeepSeek</a></div>'+(MK.info?'<p class="sub" style="margin-top:8px">'+esc(MK.info)+'</p>':'')+'</div>';
 h+='<div class="card"><p><b>3. Paste the reply</b></p><p class="sub" style="margin:4px 0 10px">Copy the chatbot’s whole reply, then come back here.</p><textarea id="mt" rows="6" placeholder="Paste the reply here">'+esc(MK.text)+'</textarea><div class="row" style="margin-top:8px"><button class="p" data-pc>Paste from clipboard</button><button data-ck>Check questions</button></div>'+(MK.msg?'<p class="msg">'+esc(MK.msg)+'</p>':'')+'</div>';
-if(r){var q=r.good[0];h+='<div class="card"><p><b>'+r.good.length+' questions ready</b></p>'+(r.bad.length?'<p class="msg">Skipped: '+esc(r.bad.slice(0,5).join("; "))+(r.bad.length>5?"…":"")+'</p>':'')+'<p class="q" style="margin-top:10px">'+esc(q.question)+'</p>'+q.options.map(function(o){return'<p class="fb">'+(o.correct?"✓ <b>":"")+esc(o.letter+") "+o.text)+(o.correct?"</b>":"")+'</p>'}).join("")+(q.reason?'<p class="why"><b>Why:</b> '+esc(q.reason)+'</p>':'')+'<div class="row" style="margin-top:12px"><button class="p g" data-sv>Save to course</button><button data-dl>Download file</button></div></div>'}
+if(MK.acc.length)h+='<div class="card"><p><b>'+MK.acc.length+' questions collected so far</b></p><p class="sub" style="margin:4px 0 8px">Copy the prompt again for more. It asks for new questions only.</p>'+(r?'':'<button class="p" data-sv>Save these</button>')+'</div>';
+if(r){var q=r.good[0];h+='<div class="card"><p><b>'+r.good.length+' questions ready</b></p>'+(r.bad.length?'<p class="msg">Skipped: '+esc(r.bad.slice(0,5).join("; "))+(r.bad.length>5?"…":"")+'</p>':'')+'<p class="q" style="margin-top:10px">'+esc(q.question)+'</p>'+q.options.map(function(o){return'<p class="fb">'+(o.correct?"✓ <b>":"")+esc(o.letter+") "+o.text)+(o.correct?"</b>":"")+'</p>'}).join("")+(q.reason?'<p class="why"><b>Why:</b> '+esc(q.reason)+'</p>':'')+'<div class="row" style="margin-top:12px"><button class="p g" data-sv>Save to course</button><button data-more>Add and keep going</button><button data-dl>Download file</button></div></div>'}
 app.innerHTML=h}
-function mkSave(){var r=MK.res;if(!r)return;rd();var rec={id:"q"+Date.now()+Math.random().toString(36).slice(2,6),course:cc==="none"?null:cc,name:MK.name.trim()||"Notes quiz "+new Date().toLocaleDateString(),data:r.good,added:Date.now(),st:fresh(r.good)};LS.push(rec);save(rec);MK={n:30,name:"",text:"",res:null,msg:"",info:""};history.back()}
-function mkDl(){var b=new Blob(['<!DOCTYPE html><html><head><meta charset="utf-8"><title>Quiz</title></head><body><script>const rawQuizData = '+JSON.stringify(MK.res.good)+';<\/script></body></html>'],{type:"text/html"}),a=document.createElement("a");a.href=URL.createObjectURL(b);a.download=(MK.name.trim()||"notes-quiz")+".html";document.body.appendChild(a);a.click();a.remove()}
+function mkAll(){var seen={};var all=MK.acc.concat(MK.res?MK.res.good:[]).filter(function(q){var k=q.question.toLowerCase();if(seen[k])return false;seen[k]=1;return true});all.forEach(function(q,i){q.id=i+1});return all}
+function mkMore(){rd();if(!MK.res)return;MK.acc=mkAll();MK.res=null;MK.text="";MK.msg="";MK.info="Added. You now have "+MK.acc.length+" questions. Copy the prompt again for more.";mkView()}
+function mkSave(){rd();var all=mkAll();if(!all.length)return;var rec={id:"q"+Date.now()+Math.random().toString(36).slice(2,6),course:cc==="none"?null:cc,name:MK.name.trim()||"Notes quiz "+new Date().toLocaleDateString(),data:all,added:Date.now(),st:fresh(all)};LS.push(rec);save(rec);MK={n:30,name:"",text:"",res:null,msg:"",info:"",acc:[]};history.back()}
+function mkDl(){var b=new Blob(['<!DOCTYPE html><html><head><meta charset="utf-8"><title>Quiz</title></head><body><script>const rawQuizData = '+JSON.stringify(mkAll())+';<\/script></body></html>'],{type:"text/html"}),a=document.createElement("a");a.href=URL.createObjectURL(b);a.download=(MK.name.trim()||"notes-quiz")+".html";document.body.appendChild(a);a.click();a.remove()}
 
 /* quiz screen */
-function open(id){cur=LS.filter(function(r){return r.id===id})[0];mode=cur.st.mode||"study";setMode(mode,true)}
+function open(id){SHOWN={};cur=LS.filter(function(r){return r.id===id})[0];mode=cur.st.mode||"study";setMode(mode,true)}
 function setMode(m,quiet){clearInterval(tick);mode=m;cur.st.mode=m;var st=cur.st;
 if(m==="review"&&!Object.keys(st.a.review).length){var qm=qmap(),bad={};["study","exam"].forEach(function(k){Object.keys(st.a[k]).forEach(function(i){if(!isRight(qm[i],st.a[k][i]))bad[i]=1})});st.rv=st.order.filter(function(i){return bad[i]});st.i.review=0}
 if(!quiet)save(cur);quiz()}
@@ -154,10 +206,10 @@ if(mode==="exam"&&!st.ex.end){h+='<div class="card"><h2>Exam mode</h2><p class="
 if(!total){h+='<div class="card"><h2>Nothing to review yet</h2><p class="sub" style="margin-top:6px">Answer some questions in Study or Exam mode. Anything you get wrong will appear here.</p></div>';app.innerHTML=h;return}
 var i=Math.min(st.i[mode],total-1),qm=qmap(),q=qm[list[i]],a=ans(),sel=a[q.id],reveal=mode==="learn"||(mode!=="exam"&&sel!=null),why=q.reason||q.explanation||q.rationale;
 h+='<div class="card"><div class="q"><small>Question '+(i+1)+' of '+total+' · #'+q.id+'</small>'+esc(q.question)+'</div>'+(q.image?'<img class="fig" alt="Figure for question '+q.id+'" src="'+q.image+'">':'');
-optOrder(q).forEach(function(oi,p){var o=q.options[oi],c="opt";
+if(q.type==="theory")h+=theoryBlock(q,sel);else optOrder(q).forEach(function(oi,p){var o=q.options[oi],c="opt";
 if(reveal){if(o.correct)c+=" ok";else if(oi===sel)c+=" no"}else if(oi===sel)c+=" sel";
 h+='<button class="'+c+'" data-pick="'+oi+'"'+(reveal?" disabled":"")+'><b>'+String.fromCharCode(65+p)+'</b><span>'+esc(o.text)+'</span></button>'});
-if(reveal&&mode!=="learn")h+='<p class="fb"><b>'+(isRight(q,sel)?"Correct.":"Not quite. The answer is highlighted in green.")+'</b></p>';
+if(reveal&&mode!=="learn"&&q.type!=="theory")h+='<p class="fb"><b>'+(isRight(q,sel)?"Correct.":"Not quite. The answer is highlighted in green.")+'</b></p>';
 if(reveal)h+=why?'<p class="why"><b>Why:</b> '+esc(why)+'</p>':mode==="learn"?'<p class="sub" style="margin-top:8px">No reason saved for this question yet.</p>':'';
 h+='</div><div class="nav"><button data-go="-1"'+(i?"":" disabled")+'>‹ Previous</button><button class="p" data-go="1"'+(i<total-1?"":" disabled")+'>Next ›</button></div>';
 if(mode==="exam")h+='<div class="nav"><button data-submit>Submit exam</button></div>';
@@ -177,11 +229,19 @@ if(d.course){history.pushState({},"");cc=d.course;return courseView()}
 if("courses" in d)return history.back();
 if("addc" in d){var nm=$("#cn").value.trim();if(!nm)return;var c={id:"c"+Date.now(),type:"course",name:nm,added:Date.now()};CS.push(c);save(c);return home()}
 if(d.delc){if(confirm("Delete this course and all its quizzes?")){LS.filter(function(x){return x.course===d.delc}).forEach(function(x){dbOp("del",x.id).catch(function(){})});LS=LS.filter(function(x){return x.course!==d.delc});CS=CS.filter(function(x){return x.id!==d.delc});dbOp("del",d.delc).catch(function(){});home()}return}
-if("maker" in d)return maker();
+if("set" in d){if(pg==="gen")grd();return settings()}
+if(d.prov){setRd();AI.p=d.prov;SM="";return setView()}
+if("saveai" in d){setRd();saveAI();SM="Saved.";return setView()}
+if("gen" in d){history.pushState({},"");pg="gen";return genView()}
+if(d.gt){grd();GN.type=d.gt;[].forEach.call(document.querySelectorAll("[data-gt]"),function(x){x.classList.toggle("on",x.dataset.gt===GN.type)});return}
+if("run" in d)return genRun();
+if("man" in d){grd();return maker()}
+if(d.ts){SHOWN[d.ts]=1;return quiz()}
 if("cp" in d){rd();return copyTxt(mkPrompt()).then(function(){MK.info="Prompt copied. Now open DeepSeek and paste it.";mkView()}).catch(function(){MK.info="Couldn’t copy automatically. Try again.";mkView()})}
 if("pc" in d){rd();return(navigator.clipboard&&navigator.clipboard.readText?navigator.clipboard.readText():Promise.reject()).then(function(t){MK.text=t;ck(true)}).catch(function(){MK.msg="Couldn’t read the clipboard. Long-press the box above and tap Paste.";mkView()})}
 if("ck" in d)return ck();
 if("sv" in d)return mkSave();
+if("more" in d)return mkMore();
 if("dl" in d){rd();return mkDl()}
 if(d.open){history.pushState({},"");return open(d.open)}
 if(d.del){var r=LS.filter(function(x){return x.id===d.del})[0];if(confirm("Delete “"+r.name+"” and its progress?")){LS=LS.filter(function(x){return x!==r});dbOp("del",r.id).catch(function(){});courseView()}return}
@@ -190,13 +250,13 @@ if("shuf" in d)return reshuffle();
 if(d.mode)return setMode(d.mode);
 if("start" in d){var m=parseInt($("#mins").value,10)||st.ex.mins;st.ex.mins=m;st.ex.end=Date.now()+m*60000;save(cur);return quiz()}
 if("submit" in d)return submit();
-if(d.pick!=null){if(mode==="learn")return;var q=qmap()[ids()[st.i[mode]]];if(mode!=="exam"&&ans()[q.id]!=null)return;ans()[q.id]=+d.pick;save(cur);return quiz()}
+if(d.pick!=null){if(mode==="learn")return;var q=qmap()[ids()[st.i[mode]]];if(mode!=="exam"&&ans()[q.id]!=null&&q.type!=="theory")return;ans()[q.id]=+d.pick;save(cur);return quiz()}
 if(d.go){st.i[mode]=Math.max(0,Math.min(ids().length-1,st.i[mode]+ +d.go));save(cur);quiz();return window.scrollTo(0,0)}
 if(d.jump!=null){st.i[mode]=+d.jump;save(cur);quiz();window.scrollTo(0,0)}});
 app.addEventListener("change",function(e){var mv=e.target.dataset.mv;if(mv&&e.target.value){var r0=LS.filter(function(x){return x.id===mv})[0];r0.course=e.target.value;save(r0);return courseView()}var cr=e.target.dataset.renc;if(cr){var c0=CS.filter(function(x){return x.id===cr})[0];c0.name=e.target.value.trim()||c0.name;save(c0);return}var id=e.target.dataset.ren;if(id){var r=LS.filter(function(x){return x.id===id})[0];r.name=e.target.value.trim()||r.name;save(r)}});
 try{var th=localStorage.getItem("qv-theme");if(th)document.documentElement.dataset.theme=th}catch(e){}
 dbOp("all").then(function(r){r=r||[];LS=r.filter(function(x){return x.type!=="course"});CS=r.filter(function(x){return x.type==="course"})}).catch(function(){memOnly=true}).then(home);
-window.addEventListener("popstate",function(){clearInterval(tick);if(mk){mk=false;courseView()}else if(cur){save(cur);cc=cur.course||"none";courseView()}else{cc=null;home()}});
+window.addEventListener("popstate",function(){clearInterval(tick);if(pg==="set"){if(cc){pg="gen";genView()}else{pg="";home()}}else if(pg||mk){pg="";mk=false;courseView()}else if(cur){save(cur);cc=cur.course||"none";courseView()}else{cc=null;home()}});
 try{navigator.storage.persist()}catch(e){}
 if("serviceWorker" in navigator)navigator.serviceWorker.register("sw.js").catch(function(){});
 </script>
